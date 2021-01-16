@@ -3,3 +3,4 @@ dmidecode
 ownership
 vpddecode
 *.o
+/CMakeLists.txt.user

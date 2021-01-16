@@ -30,12 +30,16 @@
 
 #include "config.h"
 
+#ifdef _WIN32
+#include "winsmbios.h"
+#else
 #ifdef USE_MMAP
 #include <sys/mman.h>
 #ifndef MAP_FAILED
 #define MAP_FAILED ((void *) -1)
 #endif /* !MAP_FAILED */
 #endif /* USE MMAP */
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -167,6 +171,15 @@ static void safe_memcpy(void *dest, const void *src, size_t n)
 #endif
 }
 
+#ifdef _WIN32
+
+void *mem_chunk(off_t base, size_t len, const char *devmem)
+{
+    return (u8 *)base;
+}
+
+#else
+
 /*
  * Copy a physical memory chunk into a memory buffer.
  * This function allocates memory.
@@ -258,6 +271,8 @@ out:
 
 	return p;
 }
+
+#endif
 
 int write_dump(size_t base, size_t len, const void *data, const char *dumpfile, int add)
 {

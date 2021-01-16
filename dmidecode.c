@@ -65,8 +65,14 @@
 #include <strings.h>
 #include <stdlib.h>
 #include <unistd.h>
+
+#ifdef _WIN32
+#include <winsock2.h>
+#include "winsmbios.h"
+#else
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#endif
 
 #ifdef __FreeBSD__
 #include <errno.h>
@@ -2968,7 +2974,7 @@ static const char *dmi_pointing_device_type(u8 code)
 static const char *dmi_pointing_device_interface(u8 code)
 {
 	/* 7.22.2 */
-	static const char *interface[] = {
+	static const char *iface[] = {
 		"Other", /* 0x01 */
 		"Unknown",
 		"Serial",
@@ -2985,7 +2991,7 @@ static const char *dmi_pointing_device_interface(u8 code)
 	};
 
 	if (code >= 0x01 && code <= 0x08)
-		return interface[code - 0x01];
+		return iface[code - 0x01];
 	if (code >= 0xA0 && code <= 0xA2)
 		return interface_0xA0[code - 0xA0];
 	return out_of_spec;
@@ -5396,7 +5402,9 @@ static void dmi_table(off_t base, u32 len, u16 num, u32 ver, const char *devmem,
 	else
 		dmi_table_decode(buf, len, num, ver >> 8, flags);
 
+#ifndef _WIN32
 	free(buf);
+#endif
 }
 
 
@@ -5653,12 +5661,23 @@ int main(int argc, char * const argv[])
 	int efi;
 	u8 *buf = NULL;
 
+#ifdef _WIN32
+	/*
+	 * these varibles are used only when run on windows 2003 or above.
+	 * Since these versions block access to physical memory.
+	 * Windows NT, 2000 and XP still accessing physical memory througth
+	 * mem_chunck
+	 */
+	int num_structures = 0;
+	RawSMBIOSData *smb = NULL;
+#else
 	/*
 	 * We don't want stdout and stderr to be mixed up if both are
 	 * redirected to the same file.
 	 */
 	setlinebuf(stdout);
 	setlinebuf(stderr);
+#endif
 
 	if (sizeof(u8) != 1 || sizeof(u16) != 2 || sizeof(u32) != 4 || '\0' != 0)
 	{
@@ -5788,7 +5807,32 @@ int main(int argc, char * const argv[])
 	goto done;
 
 memory_scan:
-#if defined __i386__ || defined __x86_64__
+#ifdef _WIN32
+	/*
+	 * If running on windows, checks if its Windows 2003 or vista and
+	 * get the SMBIOS data without access to physical memory.
+	 * If its Windows NT, 2000 or XP, access the physical memory and
+	 * scans for SMBIOS table entry point, just like all other OS.
+	 * If its Windows 9x or Me, print error and exits.
+	 */
+	smb = get_raw_smbios_table();
+	if (!smb) {
+		goto done;
+	}
+
+	num_structures = count_smbios_structures(&smb->SMBIOSTableData[0], smb->Length);
+
+	if (!(opt.flags & FLAG_QUIET))
+	{
+		printf("SMBIOS %u.%u present.\n", smb->SMBIOSMajorVersion, smb->SMBIOSMinorVersion);
+	}
+
+	dmi_table((u32)&smb->SMBIOSTableData[0], smb->Length, num_structures, (smb->SMBIOSMajorVersion << 8) + smb->SMBIOSMinorVersion, NULL, 0);
+
+	free(smb);
+	goto exit_free;
+
+#elif defined __i386__ || defined __x86_64__
 	if (!(opt.flags & FLAG_QUIET))
 		pr_info("Scanning %s for entry point.", opt.devmem);
 	/* Fallback to memory scan (x86, x86_64) */
