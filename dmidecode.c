@@ -5827,7 +5827,7 @@ memory_scan:
 		printf("SMBIOS %u.%u present.\n", smb->SMBIOSMajorVersion, smb->SMBIOSMinorVersion);
 	}
 
-	dmi_table((u32)&smb->SMBIOSTableData[0], smb->Length, num_structures, (smb->SMBIOSMajorVersion << 8) + smb->SMBIOSMinorVersion, NULL, 0);
+	dmi_table((u32)&smb->SMBIOSTableData[0], smb->Length, num_structures, (smb->SMBIOSMajorVersion << 16) + (smb->SMBIOSMinorVersion << 8), NULL, 0);
 
 	free(smb);
 	goto exit_free;
